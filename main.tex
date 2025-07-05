@@ -1,9 +1,11 @@
 \documentclass[a4paper,12pt]{article}
+
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{geometry}
+
 \geometry{margin=1in}
 
 \lstset{
@@ -24,21 +26,25 @@
     keywords={SELECT, FROM, WHERE, JOIN, ON, GROUP, BY, ORDER, LIMIT, COUNT, SUM, AVG},
     sensitive=false
 }
+
 \lstdefinelanguage{MongoDB}{
     keywords={db, find, aggregate, match, unwind, group, sort},
     sensitive=false
 }
+
 \lstdefinelanguage{Cypher}{
     keywords={MATCH, WHERE, RETURN, MERGE, SET, ORDER, BY, LIMIT},
     sensitive=false
 }
+
 \lstdefinelanguage{Redis}{
     keywords={HGETALL, ZREVRANGE, GET, INCR, SET},
     sensitive=false
 }
 
 \title{Consultas e Operações - DataDriven Store}
-\author{}
+\author{Vinicius Carvalho Miranda}
+
 \begin{document}
 
 \maketitle
@@ -46,12 +52,14 @@
 \section{Introdução}
 Este documento apresenta um conjunto de consultas e operações para os bancos de dados utilizados na arquitetura da DataDriven Store. Cada banco de dados é utilizado para um propósito específico, aproveitando suas características únicas. As seções a seguir detalham cinco consultas ou operações para cada banco, incluindo PostgreSQL (relacional), MongoDB (NoSQL), Neo4j (grafos), ClickHouse (analítico) e Redis (cache).
 
-\section{Docker & Populando dados de exemplo)}
+\section{Docker \& Populando dados de exemplo}
 Utilizando o Docker, podemos abrir o arquivo docker-compose.yml para verificar os serviços que serão iniciados com o comando. Abaixo estão os comandos necessários, que também incluem o processo de popular os dados de exemplo.
+
 \subsection{Inicializando o Docker e populando tabelas}
-\begin{lstlisting}[language=SQL] docker compose up  -d 
+\begin{lstlisting}[language=SQL]
+docker compose up -d
 \end{lstlisting}
-\textbf{Uso:} Nesta parte, ele irá popular quase todas as tabelas, exceto o Neo4j, que precisaremos executar manualmente..
+\textbf{Uso:} Nesta parte, ele irá popular quase todas as tabelas, exceto o Neo4j, que precisaremos executar manualmente.
 
 \subsection{Populando NEO4J}
 \begin{lstlisting}[language=SQL]
