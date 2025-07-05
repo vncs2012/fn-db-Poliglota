@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - Banco Transacional
+  postgresql:
+    image: postgres:15
+    container_name: datadriven_postgres
+    environment:
+      POSTGRES_DB: datadriven_store
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5442:5432"
+    volumes:
+      - ./scripts/postgresql:/docker-entrypoint-initdb.d
+      - postgres_data_trab:/var/lib/postgresql/data
+
+  # MongoDB - Banco de Documentos
+  mongodb:
+    image: mongo:latest
+    container_name: datadriven_mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: datadriven_store
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./scripts/mongodb/mongodb_schema.js:/docker-entrypoint-initdb.d/init-schema.js:ro
+      - mongo_data:/data/db
+
+  # Redis - Cache e Dados Voláteis
+  redis:
+   image: redis:latest
+   container_name: datadriven_redis
+   ports:
+     - "6379:6379"
+   volumes:
+     - ./scripts/redis/redis_data.sh:/data/redis_data.sh
+     - redis_data:/data
+   command: >
+     sh -c "
+       # Inicia o servidor Redis em segundo plano.
+       redis-server --requirepass admin123 &
+       PID=$!
+
+       until redis-cli -h localhost -a admin123 ping; do
+         >&2 echo 'Redis está indisponível - a aguardar...'
+         sleep 1
+       done
+       >&2 echo 'Redis está pronto.'
+
+       # Verifica se os dados já foram inicializados para não executar o script novamente.
+       if [ \"$(redis-cli -h localhost -a admin123 get dados_iniciados)\" != \"1\" ]; then
+         echo 'A executar o script de população de dados pela primeira vez...'
+        
+         chmod +x /data/redis_data.sh && sh /data/redis_data.sh
+        
+         redis-cli -h localhost -a admin123 set dados_iniciados 1
+         echo 'Script finalizado.'
+       else
+         echo 'Os dados já foram populados anteriormente. A ignorar o script.'
+       fi
+        wait $PID
+     "
+
+  #ClickHouse - Banco Colunar para Analytics
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: datadriven_clickhouse
+    environment:
+      CLICKHOUSE_DB: datadriven_store
+      CLICKHOUSE_USER: admin
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: admin123
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./scripts/clickhouse/clickhouse_schema.sql:/docker-entrypoint-initdb.d/init.sql
+      - clickhouse_data:/var/lib/clickhouse
+
+  # Neo4j - Banco de Grafos
+  neo4j:
+    image: neo4j:latest
+    container_name: datadriven_neo4j
+    environment:
+      NEO4J_AUTH: neo4j/admin123
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_cypher_run_file_init_file: "neo4j_schema.cypher"      
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+      NEO4J_dbms_logs_debug_level: "DEBUG"
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - ./scripts/neo4j:/var/lib/neo4j/import 
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+
+# docker exec -it datadriven_neo4j cypher-shell -u neo4j -p admin123 -a bolt://localhost:7687 -d neo4j -f /var/lib/neo4j/import/neo4j_schema.cypher
+
+volumes:
+  postgres_data_trab:
+  mongo_data:
+  redis_data:
+  clickhouse_data:
+  neo4j_data:
+  neo4j_logs:

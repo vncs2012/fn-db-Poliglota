@@ -1,0 +1,320 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    tabsize=2,
+    showspaces=false,
+    showstringspaces=false,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red}
+}
+
+\lstdefinelanguage{SQL}{
+    keywords={SELECT, FROM, WHERE, JOIN, ON, GROUP, BY, ORDER, LIMIT, COUNT, SUM, AVG},
+    sensitive=false
+}
+\lstdefinelanguage{MongoDB}{
+    keywords={db, find, aggregate, match, unwind, group, sort},
+    sensitive=false
+}
+\lstdefinelanguage{Cypher}{
+    keywords={MATCH, WHERE, RETURN, MERGE, SET, ORDER, BY, LIMIT},
+    sensitive=false
+}
+\lstdefinelanguage{Redis}{
+    keywords={HGETALL, ZREVRANGE, GET, INCR, SET},
+    sensitive=false
+}
+
+\title{Consultas e Operações - DataDriven Store}
+\author{}
+\begin{document}
+
+\maketitle
+
+\section{Introdução}
+Este documento apresenta um conjunto de consultas e operações para os bancos de dados utilizados na arquitetura da DataDriven Store. Cada banco de dados é utilizado para um propósito específico, aproveitando suas características únicas. As seções a seguir detalham cinco consultas ou operações para cada banco, incluindo PostgreSQL (relacional), MongoDB (NoSQL), Neo4j (grafos), ClickHouse (analítico) e Redis (cache).
+
+\section{Docker & Populando dados de exemplo)}
+Utilizando o Docker, podemos abrir o arquivo docker-compose.yml para verificar os serviços que serão iniciados com o comando. Abaixo estão os comandos necessários, que também incluem o processo de popular os dados de exemplo.
+\subsection{Inicializando o Docker e populando tabelas}
+\begin{lstlisting}[language=SQL] docker compose up  -d 
+\end{lstlisting}
+\textbf{Uso:} Nesta parte, ele irá popular quase todas as tabelas, exceto o Neo4j, que precisaremos executar manualmente..
+
+\subsection{Populando NEO4J}
+\begin{lstlisting}[language=SQL]
+docker exec -it datadriven_neo4j cypher-shell -u neo4j -p admin123 -a bolt://localhost:7687 -d neo4j -f /var/lib/neo4j/import/neo4j_schema.cypher
+\end{lstlisting}
+
+\section{PostgreSQL - Banco Relacional (OLTP)}
+O PostgreSQL é usado para gerenciar dados transacionais estruturados, como clientes, pedidos e produtos.
+
+\subsection{Consulta 1: Clientes com pedidos acima de um valor}
+\begin{lstlisting}[language=SQL]
+SELECT c.nome, c.email, p.id AS pedido_id, p.valor_total
+FROM clientes c
+JOIN pedidos p ON c.id = p.cliente_id
+WHERE p.valor_total > 1000
+ORDER BY p.valor_total DESC;
+\end{lstlisting}
+\textbf{Uso:} Identifica clientes que realizaram compras de alto valor.
+
+\subsection{Consulta 2: Produtos com estoque baixo}
+\begin{lstlisting}[language=SQL]
+SELECT codigo_produto, nome, estoque, estoque_minimo
+FROM produtos
+WHERE estoque <= estoque_minimo AND ativo = TRUE
+ORDER BY estoque ASC;
+\end{lstlisting}
+\textbf{Uso:} Auxilia na gestão de estoque.
+
+\subsection{Consulta 3: Vendas por cidade}
+\begin{lstlisting}[language=SQL]
+SELECT c.cidade, COUNT(p.id) AS total_pedidos, SUM(p.valor_total) AS valor_total_vendas
+FROM clientes c
+JOIN pedidos p ON c.id = p.cliente_id
+WHERE p.status = 'FINALIZADO'
+GROUP BY c.cidade
+ORDER BY valor_total_vendas DESC;
+\end{lstlisting}
+\textbf{Uso:} Fornece insights sobre desempenho de vendas por região.
+
+\subsection{Consulta 4: Itens mais vendidos}
+\begin{lstlisting}[language=SQL]
+SELECT pr.nome, pr.categoria, SUM(ip.quantidade) AS quantidade_vendida, SUM(ip.subtotal) AS receita_total
+FROM itens_pedido ip
+JOIN produtos pr ON ip.produto_id = pr.id
+JOIN pedidos p ON ip.pedido_id = p.id
+WHERE p.data_pedido BETWEEN '2025-06-01' AND '2025-06-30'
+GROUP BY pr.nome, pr.categoria
+ORDER BY quantidade_vendida DESC
+LIMIT 5;
+\end{lstlisting}
+\textbf{Uso:} Identifica produtos populares para planejamento.
+
+\subsection{Consulta 5: Transações por método de pagamento}
+\begin{lstlisting}[language=SQL]
+SELECT metodo_pagamento, COUNT(id) AS total_transacoes, SUM(valor) AS valor_total
+FROM transacoes_financeiras
+WHERE status = 'APROVADO'
+GROUP BY metodo_pagamento
+ORDER BY valor_total DESC;
+\end{lstlisting}
+\textbf{Uso:} Analisa preferências de métodos de pagamento.
+
+\section{MongoDB - Banco NoSQL (Documentos)}
+O MongoDB armazena dados flexíveis, como detalhes de produtos e perfis de usuários.
+
+\subsection{Consulta 1: Produtos por categoria e preço}
+\begin{lstlisting}[language=MongoDB]
+db.produtos.find(
+    { categoria: "eletrônicos", preco: { $gte: 1000, $lte: 3000 } },
+    { nome: 1, preco: 1, atributos: 1, _id: 0 }
+).sort({ preco: 1 });
+\end{lstlisting}
+\textbf{Uso:} Filtra produtos para catálogos.
+
+\subsection{Consulta 2: Produtos bem avaliados}
+\begin{lstlisting}[language=MongoDB]
+db.produtos.find(
+    { "avaliacoes.nota": { $gte: 5 } },
+    { nome: 1, avaliacoes: 1, _id: 0 }
+);
+\end{lstlisting}
+\textbf{Uso:} Destaca produtos de alta qualidade.
+
+\subsection{Consulta 3: Usuários com preferências específicas}
+\begin{lstlisting}[language=MongoDB]
+db.perfis_usuarios.find(
+    { preferencias: "gaming" },
+    { cliente_id: 1, preferencias: 1, produtos_favoritos: 1, _id: 0 }
+);
+\end{lstlisting}
+\textbf{Uso:} Segmenta usuários para campanhas.
+
+\subsection{Consulta 4: Nota média de avaliações}
+\begin{lstlisting}[language=MongoDB]
+db.produtos.aggregate([
+    { $match: { _id: "NOTEBOOK001" } },
+    { $unwind: "$avaliacoes" },
+    { $group: { _id: "$_id", media_nota: { $avg: "$avaliacoes.nota" } } }
+]);
+\end{lstlisting}
+\textbf{Uso:} Avalia a satisfação com um produto.
+
+\subsection{Consulta 5: Produtos visualizados recentemente}
+\begin{lstlisting}[language=MongoDB]
+db.perfis_usuarios.find(
+    { cliente_id: 1 },
+    { historico_navegacao: 1, _id: 0 }
+).sort({ "historico_navegacao.timestamp": -1 });
+\end{lstlisting}
+\textbf{Uso:} Personaliza a experiência do usuário.
+
+\section{Neo4j - Banco de Grafos}
+O Neo4j modela relacionamentos para sistemas de recomendação.
+
+\subsection{Consulta 1: Recomendações baseadas em similaridade}
+\begin{lstlisting}[language=Cypher]
+MATCH (c1:Cliente {id: 1})-[:SIMILAR_A]->(c2:Cliente)-[:COMPROU]->(p:Produto)
+WHERE NOT (c1)-[:COMPROU]->(p)
+RETURN p.id, p.nome, COUNT(*) AS recomendacao_score
+ORDER BY recomendacao_score DESC
+LIMIT 5;
+\end{lstlisting}
+\textbf{Uso:} Gera recomendações personalizadas.
+
+\subsection{Consulta 2: Produtos mais comprados por categoria}
+\begin{lstlisting}[language=Cypher]
+MATCH (c:Cliente)-[:COMPROU]->(p:Produto)-[:PERTENCE_A]->(cat:Categoria {nome: "eletrônicos"})
+RETURN p.nome, COUNT(*) AS total_compras
+ORDER BY total_compras DESC
+LIMIT 5;
+\end{lstlisting}
+\textbf{Uso:} Identifica produtos populares.
+
+\subsection{Consulta 3: Clientes que visualizaram sem comprar}
+\begin{lstlisting}[language=Cypher]
+MATCH (c:Cliente)-[:VISUALIZOU]->(p:Produto {id: "NOTEBOOK001"})
+WHERE NOT (c)-[:COMPROU]->(p)
+RETURN c.nome, c.email
+ORDER BY c.nome;
+\end{lstlisting}
+\textbf{Uso:} Remarketing para clientes.
+
+\subsection{Consulta 4: Marcas mais populares}
+\begin{lstlisting}[language=Cypher]
+MATCH (p:Produto)-[:DA_MARCA]->(m:Marca)<-[:DA_MARCA]-(p2:Produto)<-[:COMPROU]-(c:Cliente)
+RETURN m.nome, COUNT(DISTINCT c) AS total_clientes
+ORDER BY total_clientes DESC;
+\end{lstlisting}
+\textbf{Uso:} Analisa popularidade de marcas.
+
+\subsection{Consulta 5: Caminhos de recomendação}
+\begin{lstlisting}[language=Cypher]
+MATCH path = (c:Cliente)-[:COMPROU]->(:Produto)-[:PERTENCE_A]->(:Categoria)-[:PERTENCE_A*0..1]->(:Categoria)
+WHERE c.id = 1
+RETURN path
+LIMIT 10;
+\end{lstlisting}
+\textbf{Uso:} Explora conexões entre categorias.
+
+\section{ClickHouse - Banco Analítico (OLAP)}
+O ClickHouse processa eventos para análises rápidas.
+
+\subsection{Consulta 1: Taxa de conversão por produto}
+\begin{lstlisting}[language=SQL]
+SELECT 
+    produto_id,
+    COUNT(*) AS total_visualizacoes,
+    SUM(adicionou_carrinho) AS total_carrinho,
+    SUM(comprou) AS total_compras,
+    (SUM(comprou) * 100.0 / COUNT(*)) AS taxa_conversao
+FROM funil_conversao
+WHERE data >= '2025-06-01'
+GROUP BY produto_id
+ORDER BY taxa_conversao DESC;
+\end{lstlisting}
+\textbf{Uso:} Avalia eficiência de conversão.
+
+\subsection{Consulta 2: Eventos por origem de tráfego}
+\begin{lstlisting}[language=SQL]
+SELECT 
+    utm_source,
+    COUNT(*) AS total_eventos,
+    SUM(CASE WHEN evento_tipo = 'purchase' THEN 1 ELSE 0 END) AS total_compras,
+    SUM(valor_total) AS receita_total
+FROM eventos
+WHERE data >= '2025-06-01'
+GROUP BY utm_source
+ORDER BY receita_total DESC;
+\end{lstlisting}
+\textbf{Uso:} Otimiza campanhas de marketing.
+
+\subsection{Consulta 3: Produtos mais visualizados}
+\begin{lstlisting}[language=SQL]
+SELECT 
+    produto_id,
+    categoria,
+    COUNT(*) AS total_visualizacoes
+FROM eventos
+WHERE evento_tipo = 'view' AND data BETWEEN '2025-06-01' AND '2025-06-30'
+GROUP BY produto_id, categoria
+ORDER BY total_visualizacoes DESC
+LIMIT 10;
+\end{lstlisting}
+\textbf{Uso:} Ajusta catálogo com base em popularidade.
+
+\subsection{Consulta 4: Comportamento por dispositivo}
+\begin{lstlisting}[language=SQL]
+SELECT 
+    device_type,
+    COUNT(DISTINCT session_id) AS sessoes_unicas,
+    SUM(CASE WHEN evento_tipo = 'purchase' THEN valor_total ELSE 0 END) AS receita_total
+FROM eventos
+WHERE data >= '2025-06-01'
+GROUP BY device_type
+ORDER BY receita_total DESC;
+\end{lstlisting}
+\textbf{Uso:} Otimiza experiência por dispositivo.
+
+\subsection{Consulta 5: Buscas populares}
+\begin{lstlisting}[language=SQL]
+SELECT 
+    termo_busca,
+    COUNT(*) AS total_buscas,
+    AVG(resultados_busca) AS media_resultados
+FROM eventos
+WHERE evento_tipo = 'search' AND termo_busca != ''
+GROUP BY termo_busca
+ORDER BY total_buscas DESC
+LIMIT 5;
+\end{lstlisting}
+\textbf{Uso:} Otimiza motor de busca.
+
+\section{Redis - Cache e Sessões}
+O Redis gerencia sessões, carrinhos e rankings em tempo real.
+
+\subsection{Operação 1: Recuperar carrinho}
+\begin{lstlisting}[language=Redis]
+HGETALL cart:user_001
+\end{lstlisting}
+\textbf{Uso:} Exibe itens no carrinho.
+
+\subsection{Operação 2: Produtos mais visualizados}
+\begin{lstlisting}[language=Redis]
+ZREVRANGE most_viewed 0 4 WITHSCORES
+\end{lstlisting}
+\textbf{Uso:} Destaca produtos populares.
+
+\subsection{Operação 3: Verificar sessão}
+\begin{lstlisting}[language=Redis]
+GET session:user_001
+\end{lstlisting}
+\textbf{Uso:} Valida sessões ativas.
+
+\subsection{Operação 4: Resultados de busca em cache}
+\begin{lstlisting}[language=Redis]
+GET search:gaming
+\end{lstlisting}
+\textbf{Uso:} Reduz latência em buscas.
+
+\subsection{Operação 5: Contagem de visualizações}
+\begin{lstlisting}[language=Redis]
+INCR views:NOTEBOOK001:2025-06-28
+\end{lstlisting}
+\textbf{Uso:} Rastreia popularidade em tempo real.
+
+\end{document}
